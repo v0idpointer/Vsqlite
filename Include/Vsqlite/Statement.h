@@ -7,6 +7,7 @@
 #ifndef _AD_STATEMENT_H_
 #define _AD_STATEMENT_H_
 
+#include <Vsqlite/DataBinding.h>
 #include <Vsqlite/SQLiteException.h>
 
 #include <string_view>
@@ -38,6 +39,32 @@ namespace Vsqlite {
         void Reset(void);
         void Step(void);
         void Execute(void);
+
+        template <typename T>
+        void Bind(const std::int32_t index, const T& arg);
+
+        template <typename T, typename... Args>
+        void Bind(const std::int32_t index, const T& arg, const Args&... args);
+
+        template <typename T, typename... Args>
+        void Bind(const T& arg, const Args&... args);
+
+        void Column(void);
+
+        template <typename T>
+        void Column(const std::int32_t column, T& arg);
+
+        template <typename T, typename... Args>
+        void Column(const std::int32_t column, T& arg, Args&... args);
+
+        template <typename T, typename... Args>
+        void Column(T& arg, Args&... args);
+
+        template <typename... Args>
+        bool Fetch(Args&... args);
+
+        template <typename... Args>
+        void Execute(const Args&... args);
 
     };
 
@@ -97,7 +124,7 @@ namespace Vsqlite {
 
     inline void Statement::Reset() {
         const std::int32_t res = sqlite3_reset(this->m_pStatement);
-        if (res != SQLITE_OK)throw SQLiteException(this->m_pStatement);
+        if (res != SQLITE_OK) throw SQLiteException(this->m_pStatement);
     }
 
     inline void Statement::Step() {
@@ -108,6 +135,63 @@ namespace Vsqlite {
 
     inline void Statement::Execute() {
         this->Reset();
+        this->Step();
+    }
+
+    template <typename T>
+    inline void Statement::Bind(const std::int32_t index, const T& arg) {
+        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, index, arg);
+        if (res != SQLITE_OK) throw SQLiteException(this->m_pStatement);
+    }
+
+    template <typename T, typename... Args>
+    inline void Statement::Bind(const std::int32_t index, const T& arg, const Args&... args) {
+        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, index, arg);
+        if (res != SQLITE_OK) throw SQLiteException(this->m_pStatement);
+        this->Bind((index + 1), args...);
+    }
+
+    template <typename T, typename... Args>
+    inline void Statement::Bind(const T& arg, const Args&... args) {
+        this->Bind(1, arg, args...);
+    }
+
+    inline void Statement::Column() { }
+
+    template <typename T>
+    inline void Statement::Column(const std::int32_t column, T& arg) {
+        DataBinding<T>::Column(this->m_pStatement, column, arg);
+    }
+
+    template <typename T, typename... Args>
+    inline void Statement::Column(const std::int32_t column, T& arg, Args&... args) {
+        DataBinding<T>::Column(this->m_pStatement, column, arg);
+        this->Column((column + 1), args...);
+    }
+
+    template <typename T, typename... Args>
+    inline void Statement::Column(T& arg, Args&... args) {
+        this->Column(0, arg, args...);
+    }
+
+    template <typename... Args>
+    inline bool Statement::Fetch(Args&... args) {
+
+        if (!this->m_canFetch) this->Step();
+
+        if (this->m_canFetch) {
+            this->Column(args...);
+            this->m_canFetch = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    template <typename... Args>
+    inline void Statement::Execute(const Args&... args) {
+        this->Reset();
+        this->Bind(args...);
         this->Step();
     }
 
