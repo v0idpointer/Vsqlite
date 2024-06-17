@@ -7,6 +7,7 @@
 #ifndef _AD_DATABASE_H_
 #define _AD_DATABASE_H_
 
+#include <Vsqlite/TransactionType.h>
 #include <Vsqlite/SQLiteException.h>
 
 #include <string_view>
@@ -35,6 +36,10 @@ namespace Vsqlite {
 
         [[nodiscard]] Statement PrepareStatement(const std::string_view sql, const std::int32_t flags = 0);
         Statement Execute(const std::string_view sql);
+
+        void BeginTransaction(const TransactionType transactionType = TransactionType::DEFERRED);
+        void Rollback(void);
+        void Commit(void);
 
     };
 
@@ -99,6 +104,38 @@ namespace Vsqlite {
         Statement s = { *this, sql, 0 };
         s.Execute();
         return s;
+    }
+
+    inline void Database::BeginTransaction(const TransactionType transactionType) {
+
+        switch (transactionType) {
+
+            case TransactionType::DEFERRED:
+                this->Execute("BEGIN DEFERRED TRANSACTION;");
+                break;
+
+            case TransactionType::IMMEDIATE:
+                this->Execute("BEGIN IMMEDIATE TRANSACTION;");
+                break;
+
+            case TransactionType::EXCLUSIVE:
+                this->Execute("BEGIN EXCLUSIVE TRANSACTION;");
+                break;
+
+            default:
+                throw std::invalid_argument("Invalid transaction type.");
+                break;
+
+        }
+
+    }
+
+    inline void Database::Rollback() {
+        this->Execute("ROLLBACK TRANSACTION;");
+    }
+
+    inline void Database::Commit() {
+        this->Execute("COMMIT TRANSACTION;");
     }
 
 }
