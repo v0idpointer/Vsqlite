@@ -40,22 +40,22 @@ namespace Vsqlite {
         void Step(void);
         void Execute(void);
 
-        template <typename T>
-        void Bind(const std::int32_t index, const T& arg);
+        template <std::int32_t Index, typename T>
+        void Bind(const T& arg);
 
-        template <typename T, typename... Args>
-        void Bind(const std::int32_t index, const T& arg, const Args&... args);
+        template <std::int32_t Index, typename T, typename... Args>
+        void Bind(const T& arg, const Args&... args);
 
         template <typename T, typename... Args>
         void Bind(const T& arg, const Args&... args);
 
         void Column(void);
 
-        template <typename T>
-        void Column(const std::int32_t column, T& arg);
+        template <std::int32_t Column, typename T>
+        void Column(T& arg);
 
-        template <typename T, typename... Args>
-        void Column(const std::int32_t column, T& arg, Args&... args);
+        template <std::int32_t Column, typename T, typename... Args>
+        void Column(T& arg, Args&... args);
 
         template <typename T, typename... Args>
         void Column(T& arg, Args&... args);
@@ -138,40 +138,40 @@ namespace Vsqlite {
         this->Step();
     }
 
-    template <typename T>
-    inline void Statement::Bind(const std::int32_t index, const T& arg) {
-        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, index, arg);
+    template <std::int32_t Index, typename T>
+    inline void Statement::Bind(const T& arg) {
+        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, Index, arg);
         if (res != SQLITE_OK) throw SQLiteException(this->m_pStatement);
     }
 
-    template <typename T, typename... Args>
-    inline void Statement::Bind(const std::int32_t index, const T& arg, const Args&... args) {
-        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, index, arg);
+    template <std::int32_t Index, typename T, typename... Args>
+    inline void Statement::Bind(const T& arg, const Args&... args) {
+        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, Index, arg);
         if (res != SQLITE_OK) throw SQLiteException(this->m_pStatement);
-        this->Bind((index + 1), args...);
+        this->Bind<Index + 1>(args...);
     }
 
     template <typename T, typename... Args>
     inline void Statement::Bind(const T& arg, const Args&... args) {
-        this->Bind(1, arg, args...);
+        this->Bind<1>(arg, args...);
     }
 
     inline void Statement::Column() { }
 
-    template <typename T>
-    inline void Statement::Column(const std::int32_t column, T& arg) {
-        DataBinding<T>::Column(this->m_pStatement, column, arg);
+    template <std::int32_t Column, typename T>
+    inline void Statement::Column(T& arg) {
+        DataBinding<T>::Column(this->m_pStatement, Column, arg);
     }
 
-    template <typename T, typename... Args>
-    inline void Statement::Column(const std::int32_t column, T& arg, Args&... args) {
-        DataBinding<T>::Column(this->m_pStatement, column, arg);
-        this->Column((column + 1), args...);
+    template <std::int32_t Column, typename T, typename... Args>
+    inline void Statement::Column(T& arg, Args&... args) {
+        DataBinding<T>::Column(this->m_pStatement, Column, arg);
+        this->Column<Column + 1>(args...);
     }
 
     template <typename T, typename... Args>
     inline void Statement::Column(T& arg, Args&... args) {
-        this->Column(0, arg, args...);
+        this->Column<0>(arg, args...);
     }
 
     template <typename... Args>
