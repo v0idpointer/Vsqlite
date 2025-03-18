@@ -8,6 +8,7 @@
 #define _VSQLITE_STATEMENT_H_
 
 #include <Vsqlite/SQLite.h>
+#include <Vsqlite/DataBinding.h>
 #include <Vsqlite/SqliteException.h>
 
 #include <string_view>
@@ -24,6 +25,7 @@ namespace Vsqlite {
 
     private:
         sqlite3_stmt* m_pStatement;
+        bool m_canFetch;
 
     public:
 
@@ -84,6 +86,141 @@ namespace Vsqlite {
          */
         void Execute(void);
 
+        /**
+         * 
+         * 
+         * @tparam Index
+         * @tparam T
+         * @param arg
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <std::int32_t Index, typename T>
+        void Bind(const T& arg);
+
+        /**
+         * 
+         * 
+         * @tparam T
+         * @param arg
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <typename T>
+        void Bind(const T& arg);
+
+        /**
+         * 
+         * 
+         * @tparam Index
+         * @tparam T
+         * @tparam Args
+         * @param arg
+         * @param args
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <std::int32_t Index, typename T, typename... Args>
+        void Bind(const T& arg, const Args&... args);
+
+        /**
+         * 
+         * 
+         * @tparam T
+         * @tparam Args
+         * @param arg
+         * @param args
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <typename T, typename... Args>
+        void Bind(const T& arg, const Args&... args);
+
+        /**
+         * Unbinds all data from the SQLite statement.
+         * 
+         * @exception SqliteException
+         */
+        void Unbind(void);
+
+        /**
+         * This function does nothing.
+         */
+        void Column(void);
+
+        /**
+         * 
+         * 
+         * @tparam Column
+         * @tparam T
+         * @param arg
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <std::int32_t Column, typename T>
+        void Column(T& arg);
+
+        /**
+         * 
+         * 
+         * @tparam T
+         * @param arg
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <typename T>
+        void Column(T& arg);
+
+        /**
+         * 
+         * 
+         * @tparam Column
+         * @tparam T
+         * @tparam Args
+         * @param arg
+         * @param args
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <std::int32_t Column, typename T, typename... Args>
+        void Column(T& arg, Args&... args);
+
+        /**
+         * 
+         * 
+         * @tparam T
+         * @tparam Args
+         * @param arg
+         * @param args
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <typename T, typename... Args>
+        void Column(T& arg, Args&... args);
+
+        /**
+         * Retrieves values from the current row of an SQLite result set.
+         * 
+         * @tparam Args...
+         * @param args
+         * @returns true if Fetch can retrieve more data; otherwise, false.
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <typename... Args>
+        bool Fetch(Args&... args);
+
+        /**
+         * Executes the statement.
+         * 
+         * @tparam Args... 
+         * @param args 
+         * @exception std::invalid_argument
+         * @exception SqliteException
+         */
+        template <typename... Args>
+        void Execute(const Args&... args);
+
     };
 
     inline Statement::Statement(sqlite3* pDatabase, const std::string_view sql, const std::int32_t flags) {
@@ -104,8 +241,11 @@ namespace Vsqlite {
             const SqliteException ex = { pDatabase };
             sqlite3_finalize(this->m_pStatement);
             this->m_pStatement = nullptr;
+            this->m_canFetch = false;
             throw ex;
         }
+
+        this->m_canFetch = false;
 
     }
 
@@ -119,6 +259,7 @@ namespace Vsqlite {
         if (this->m_pStatement) {
             sqlite3_finalize(this->m_pStatement);
             this->m_pStatement = nullptr;
+            this->m_canFetch = false;
         }
 
     }
@@ -130,10 +271,13 @@ namespace Vsqlite {
             if (this->m_pStatement) {
                 sqlite3_finalize(this->m_pStatement);
                 this->m_pStatement = nullptr;
+                this->m_canFetch = false;
             }
 
             this->m_pStatement = statement.m_pStatement;
+            this->m_canFetch = statement.m_canFetch;
             statement.m_pStatement = nullptr;
+            statement.m_canFetch = false;
             
         }
 
@@ -147,15 +291,91 @@ namespace Vsqlite {
     inline void Statement::Reset() { 
         const std::int32_t res = sqlite3_reset(this->m_pStatement);
         if (res != SQLITE_OK) throw SqliteException(this->m_pStatement);
+        this->m_canFetch = false;
     }
 
     inline void Statement::Step() { 
         const std::int32_t res = sqlite3_step(this->m_pStatement);
         if ((res != SQLITE_ROW) && (res != SQLITE_DONE)) throw SqliteException(this->m_pStatement); 
+        this->m_canFetch = (res == SQLITE_ROW);
     }
 
     inline void Statement::Execute() { 
         this->Reset();
+        this->Unbind();
+        this->Step();
+    }
+
+    template <std::int32_t Index, typename T>
+    inline void Statement::Bind(const T& arg) {
+        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, Index, arg);
+        if (res != SQLITE_OK) throw SqliteException(this->m_pStatement);
+    }
+
+    template <typename T>
+    inline void Statement::Bind(const T& arg) {
+        this->Bind<1>(arg);
+    }
+
+    template <std::int32_t Index, typename T, typename... Args>
+    inline void Statement::Bind(const T& arg, const Args&... args) {
+        const std::int32_t res = DataBinding<T>::Bind(this->m_pStatement, Index, arg);
+        if (res != SQLITE_OK) throw SqliteException(this->m_pStatement);
+        this->Bind<Index + 1>(args...);
+    }
+
+    template <typename T, typename... Args>
+    inline void Statement::Bind(const T& arg, const Args&... args) {
+        this->Bind<1>(arg, args...);
+    }
+
+    inline void Statement::Unbind() {
+        const std::int32_t res = sqlite3_clear_bindings(this->m_pStatement);
+        if (res != SQLITE_OK) throw SqliteException(this->m_pStatement);
+    }
+
+    inline void Statement::Column() { }
+
+    template <std::int32_t Column, typename T>
+    inline void Statement::Column(T& arg) {
+        DataBinding<T>::Column(this->m_pStatement, Column, arg);
+    }
+
+    template <typename T>
+    inline void Statement::Column(T& arg) {
+        this->Column<0>(arg);
+    }
+
+    template <std::int32_t Column, typename T, typename... Args>
+    inline void Statement::Column(T& arg, Args&... args) {
+        DataBinding<T>::Column(this->m_pStatement, Column, arg);
+        this->Column<Column + 1>(args...);
+    }
+
+    template <typename T, typename... Args>
+    inline void Statement::Column(T& arg, Args&... args) {
+        this->Column<0>(arg, args...);
+    }
+
+    template <typename... Args>
+    inline bool Statement::Fetch(Args&... args) {
+
+        if (!this->m_canFetch) this->Step();
+
+        if (this->m_canFetch) {
+            this->Column(args...);
+            this->m_canFetch = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    template <typename... Args>
+    inline void Statement::Execute(const Args&... args) {
+        this->Reset();
+        this->Unbind();
+        this->Bind(args...);
         this->Step();
     }
 
